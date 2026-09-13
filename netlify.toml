@@ -1,0 +1,20 @@
+# Netlify 部署配置
+#
+# 前端是**纯静态导出**（见 next.config.ts 里的 output: "export"）：构建产物就是一组
+# 静态文件，没有服务端渲染，也没有 Netlify Functions。所以这里只声明「在哪构建、
+# 构建什么、发布哪份产物」，不需要 Next.js 运行时插件。
+#
+# ⚠️ 本仓库只含前端。对话、检索、记忆读写、沙箱执行全部由 FastAPI 后端（:8002）提供，
+# 静态站点自身跑不了它——后端需要本地文件系统、Docker 与模型服务。
+# 因此部署在 Netlify 上的是**界面**：页面能打开、能切换会话视图，
+# 但所有 /api/* 请求都会失败（前端会去打 `<站点域名>:8002`，那里没有服务）。
+# 要让站点真正可用，需要另有一台可达的后端，再让前端指向它。
+
+[build]
+  base = "frontend"
+  command = "npm run build"
+  publish = "out"
+
+[build.environment]
+  # Next.js 16 要求 Node >= 20.9，钉住版本避免 Netlify 默认版本带来意外
+  NODE_VERSION = "22"
