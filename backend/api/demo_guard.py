@@ -26,14 +26,20 @@ from __future__ import annotations
 
 import base64
 import hmac
+import secrets
 import time
 from collections import defaultdict
+from http.cookies import CookieError, SimpleCookie
 
 from fastapi import Request
+from starlette.datastructures import MutableHeaders
 from starlette.responses import PlainTextResponse
-from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from config import Settings
+
+#: 访客标识用的 Cookie 名
+VISITOR_COOKIE = "airclaw_visitor"
 
 #: 不需要口令的路径。容器 HEALTHCHECK 打的就是它，带上认证反而会一直不健康
 EXEMPT_PATHS = frozenset({"/api/health"})
@@ -48,9 +54,18 @@ RATE_WINDOW_SECONDS = 3600
 def visitor_id(request: Request) -> str:
     """访客标识，演示模式下用于隔离会话。
 
-    取客户端 IP 而不引入登录体系：访客只需一个口令，不用注册。代价是换网络（或移动网络
-    换基站）会认不出是同一个人——演示场景可以接受。
+    **不能用客户端 IP。** 容器化部署里 Docker 的端口转发会把源地址改写成网桥网关
+    （实测：从宿主机访问，容器看到的客户端是 172.18.0.1），于是所有访客共用一个
+    身份——隔离形同虚设，连运维自己的会话也会暴露给访客。改用浏览器 Cookie：
+    与 NAT 无关，且访客换网络后仍认得出是同一个人。
+
+    Cookie 由本中间件在首次响应时下发（见 _with_visitor_cookie），这里只负责读取；
+    拿不到时（例如客户端禁了 Cookie）退回 IP，此时隔离会退化为「同一出口 IP 视为
+    同一人」，不理想但不会把所有人的会话混在一起。
     """
+    vid = getattr(request.state, "visitor", "")
+    if vid:
+        return vid
     return request.client.host if request.client else "unknown"
 
 
@@ -94,6 +109,40 @@ class DemoGuard:
         self._hits[client] = recent
         return False
 
+    # ---- 访客标识 ----
+
+    @staticmethod
+    def _visitor(scope: Scope) -> tuple[str, bool]:
+        """从 Cookie 取访客标识；没有就现生成一个（返回是否是新发的）。"""
+        raw = dict(scope["headers"]).get(b"cookie", b"").decode("latin-1")
+        if raw:
+            jar = SimpleCookie()
+            try:
+                jar.load(raw)
+            except CookieError:
+                jar = SimpleCookie()
+            morsel = jar.get(VISITOR_COOKIE)
+            if morsel and morsel.value:
+                return morsel.value, False
+        return secrets.token_urlsafe(16), True
+
+    @staticmethod
+    def _with_visitor_cookie(send: Send, vid: str) -> Send:
+        """在下发响应时补一个 Set-Cookie。
+
+        只改响应头，不碰响应体——对话接口是 SSE，任何对 body 的包装都会干扰流式输出。
+        """
+
+        async def wrapped(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                MutableHeaders(scope=message).append(
+                    "Set-Cookie",
+                    f"{VISITOR_COOKIE}={vid}; Path=/; Max-Age=86400; HttpOnly; SameSite=Lax",
+                )
+            await send(message)
+
+        return wrapped
+
     # ---- ASGI ----
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
@@ -103,6 +152,12 @@ class DemoGuard:
         path = scope["path"]
         method = scope["method"].upper()
         client = scope["client"][0] if scope.get("client") else "unknown"
+
+        vid, is_new = self._visitor(scope)
+        # 交给下游（api 层）读，避免各处重复解析 Cookie
+        scope.setdefault("state", {})["visitor"] = vid
+        if is_new:
+            send = self._with_visitor_cookie(send, vid)
 
         # OPTIONS 是 CORS 预检，浏览器不会带凭证，拦它等于把跨域全堵死
         if path not in EXEMPT_PATHS and method != "OPTIONS":
