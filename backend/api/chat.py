@@ -19,10 +19,11 @@ from __future__ import annotations
 import json
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
+from api.demo_guard import visitor_id
 from config import get_settings
 from graph.agent import agent_manager
 from graph.daily_log import append_turn
@@ -64,24 +65,37 @@ def _sse(event: dict) -> dict:
 
 
 @router.post("/chat")
-async def chat(request: ChatRequest) -> EventSourceResponse:
+async def chat(body: ChatRequest, request: Request) -> EventSourceResponse:
     sessions = agent_manager.sessions
 
-    if not sessions.exists(request.session_id):
-        raise HTTPException(status_code=404, detail=f"会话不存在：{request.session_id}")
+    if not sessions.exists(body.session_id):
+        raise HTTPException(status_code=404, detail=f"会话不存在：{body.session_id}")
+
+    settings = get_settings()
+    if settings.demo_mode:
+        # 演示模式：会话按访客隔离，别人的会话一律按「不存在」处理
+        if sessions.owner(body.session_id) != visitor_id(request):
+            raise HTTPException(status_code=404, detail=f"会话不存在：{body.session_id}")
+        # 单条消息长度封顶：一条几万字的提问足以把模型额度烧掉一大截
+        limit = settings.demo_max_message_chars
+        if len(body.message) > limit:
+            raise HTTPException(
+                status_code=413,
+                detail=f"演示模式：单条消息最多 {limit} 字，当前 {len(body.message)} 字。",
+            )
 
     async def event_generator():
-        history = sessions.load_for_agent(request.session_id)
-        is_first_message = len(sessions.load_messages(request.session_id)) == 0
+        history = sessions.load_for_agent(body.session_id)
+        is_first_message = len(sessions.load_messages(body.session_id)) == 0
 
         # 按段追踪：工具执行后模型重新生成文本时开启新段
         segments: list[dict] = [{"content": [], "tool_calls": []}]
         failed = False
 
         async for event in agent_manager.astream(
-            message=request.message,
+            message=body.message,
             history=history,
-            session_id=request.session_id,
+            session_id=body.session_id,
             user=get_settings().app_user,
         ):
             kind = event.get("type")
@@ -109,30 +123,30 @@ async def chat(request: ChatRequest) -> EventSourceResponse:
             return
 
         # ---- 落盘：用户消息 + 每段助手消息 ----
-        sessions.save_message(request.session_id, "user", request.message)
+        sessions.save_message(body.session_id, "user", body.message)
         for segment in segments:
             content = "".join(segment["content"]).strip()
             if content or segment["tool_calls"]:
                 sessions.save_message(
-                    request.session_id, "assistant", content, segment["tool_calls"] or None
+                    body.session_id, "assistant", content, segment["tool_calls"] or None
                 )
 
         # ---- 首条消息自动生成标题 ----
         if is_first_message:
             answer = "".join("".join(s["content"]) for s in segments).strip()
-            title = await agent_manager.generate_title(request.message, answer)
-            sessions.rename(request.session_id, title)
+            title = await agent_manager.generate_title(body.message, answer)
+            sessions.rename(body.session_id, title)
             yield _sse(
-                {"type": "title", "session_id": request.session_id, "title": title}
+                {"type": "title", "session_id": body.session_id, "title": title}
             )
 
         # ---- 每日日志：由后端追加，Agent 不负责（见 graph/daily_log.py） ----
         # 放在标题生成之后，日志里才能带上真实的会话标题而非「新会话」
         append_turn(
             get_settings().memory_path / "logs",
-            session_id=request.session_id,
-            session_title=sessions.load(request.session_id).get("title", ""),
-            user_message=request.message,
+            session_id=body.session_id,
+            session_title=sessions.load(body.session_id).get("title", ""),
+            user_message=body.message,
             reply="".join("".join(s["content"]) for s in segments).strip(),
             artifacts=_artifacts(segments),
         )

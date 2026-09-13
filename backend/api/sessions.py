@@ -14,9 +14,10 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from api.demo_guard import visitor_id
 from config import get_runtime_config, get_settings
 from graph.agent import agent_manager
 from graph.prompt_builder import build_system_prompt, describe_components
@@ -34,41 +35,61 @@ def _sessions():
     return agent_manager.sessions
 
 
-def _require(session_id: str):
+def _own(session_id: str, request: Request) -> None:
+    """演示模式：只认本访客自己的会话。
+
+    越权时返回 404 而不是 403——403 等于告诉对方「这个 ID 确实存在，只是不属于你」，
+    而演示面向的是不特定访客，没必要透露这个信息。历史遗留的、没有 owner 的会话
+    （本机自己用出来的）对访客同样不可见。
+    """
+    settings = get_settings()
+    if not settings.demo_mode:
+        return
+    if _sessions().owner(session_id) != visitor_id(request):
+        raise HTTPException(status_code=404, detail=f"会话不存在：{session_id}")
+
+
+def _require(session_id: str, request: Request):
     sessions = _sessions()
     if not sessions.exists(session_id):
         raise HTTPException(status_code=404, detail=f"会话不存在：{session_id}")
+    _own(session_id, request)
     return sessions
 
 
+def _demo() -> bool:
+    return get_settings().demo_mode
+
+
 @router.get("/sessions")
-async def list_sessions() -> dict:
-    return {"sessions": _sessions().list_sessions()}
+async def list_sessions(request: Request) -> dict:
+    owner = visitor_id(request) if _demo() else None
+    return {"sessions": _sessions().list_sessions(owner=owner)}
 
 
 @router.post("/sessions", status_code=201)
-async def create_session() -> dict:
-    return _sessions().create()
+async def create_session(request: Request) -> dict:
+    return _sessions().create(owner=visitor_id(request) if _demo() else "")
 
 
 @router.put("/sessions/{session_id}")
-async def rename_session(session_id: str, request: RenameRequest) -> dict:
-    sessions = _require(session_id)
-    sessions.rename(session_id, request.title)
-    return {"id": session_id, "title": request.title}
+async def rename_session(session_id: str, body: RenameRequest, request: Request) -> dict:
+    sessions = _require(session_id, request)
+    sessions.rename(session_id, body.title)
+    return {"id": session_id, "title": body.title}
 
 
 @router.delete("/sessions/{session_id}")
-async def delete_session(session_id: str) -> dict:
-    sessions = _require(session_id)
+async def delete_session(session_id: str, request: Request) -> dict:
+    sessions = _require(session_id, request)
     sessions.delete(session_id)
     return {"id": session_id, "deleted": True}
 
 
 @router.get("/sessions/{session_id}/messages")
-async def get_messages(session_id: str) -> dict:
+async def get_messages(session_id: str, request: Request) -> dict:
     """完整消息，含当前生效的 System Prompt（供前端 Raw Messages 视图）。"""
-    sessions = _require(session_id)
+    sessions = _require(session_id, request)
     data = sessions.load(session_id)
     settings = get_settings()
     rag_mode = get_runtime_config().get_rag_mode()
@@ -82,14 +103,14 @@ async def get_messages(session_id: str) -> dict:
 
 
 @router.get("/sessions/{session_id}/history")
-async def get_history(session_id: str) -> dict:
-    sessions = _require(session_id)
+async def get_history(session_id: str, request: Request) -> dict:
+    sessions = _require(session_id, request)
     return {"session_id": session_id, "messages": sessions.load_messages(session_id)}
 
 
 @router.post("/sessions/{session_id}/generate-title")
-async def generate_title(session_id: str) -> dict:
-    sessions = _require(session_id)
+async def generate_title(session_id: str, request: Request) -> dict:
+    sessions = _require(session_id, request)
     messages = sessions.load_messages(session_id)
     if not messages:
         raise HTTPException(status_code=400, detail="会话为空，无法生成标题")
@@ -104,9 +125,9 @@ async def generate_title(session_id: str) -> dict:
 
 
 @router.post("/sessions/{session_id}/compress")
-async def compress_session(session_id: str) -> dict:
+async def compress_session(session_id: str, request: Request) -> dict:
     """压缩前 50% 的历史消息（至少 4 条）。"""
-    sessions = _require(session_id)
+    sessions = _require(session_id, request)
     messages = sessions.load_messages(session_id)
 
     if len(messages) < 4:

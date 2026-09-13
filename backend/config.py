@@ -120,6 +120,19 @@ class Settings(BaseSettings):
     def sandbox_uses_volume(self) -> bool:
         return bool(self.sandbox_src_volume and self.sandbox_out_volume)
 
+    # ---- 演示模式（把系统交给别人体验时用）----
+    #
+    # 打开后，api/demo_guard.py 会装上三道闸：
+    #   共享口令   所有请求（含静态界面）要过一次 Basic 认证，拦掉「链接一传就全网可用」
+    #   只读       除「发起对话」外的一切写操作被拒，访客删不掉会话/语料，也改不了系统提示词
+    #   按 IP 限流 对话条数与单条长度都封顶，避免有人拿它刷你的模型额度
+    # 另：演示模式下会话按访客 IP 隔离，访客互相看不到对方的对话。
+    # 默认关闭，本机与内网正常使用完全不受影响。
+    demo_mode: bool = False
+    demo_password: str = ""
+    demo_chat_per_hour: int = 30
+    demo_max_message_chars: int = 2000
+
     # ---- 会话与上下文 ----
     prompt_component_max_chars: int = 20_000
     compress_ratio: float = 0.5

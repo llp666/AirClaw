@@ -23,6 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from api import chat, config_api, files, knowledge, rag, sessions, skills, tokens
+from api.demo_guard import DemoGuard
 from config import BACKEND_DIR, get_runtime_config, get_settings
 from graph.agent import agent_manager
 from graph.audit_hooks import harden_audit_dir
@@ -99,6 +100,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 演示模式（DEMO_MODE=true）：共享口令 + 只读 + 按 IP 限流，见 api/demo_guard.py。
+# 在 CORS 之后添加，于是它位于 CORS 内层——跨域预检由 CORS 直接应答，不会被口令拦掉；
+# 其余请求先过 CORS 补头，再过这里的三道闸。
+if get_settings().demo_mode:
+    app.add_middleware(DemoGuard, settings=get_settings())
 
 app.include_router(chat.router, prefix="/api", tags=["chat"])
 app.include_router(sessions.router, prefix="/api", tags=["sessions"])

@@ -6,6 +6,7 @@
 
     {
       "title": "生成单元测试报告",
+      "owner": "203.0.113.9",
       "created_at": 1706000000.0,
       "updated_at": 1706000100.0,
       "compressed_context": "用户之前请求为 shell_tool.py 生成测试...",
@@ -15,6 +16,8 @@
         {"role": "assistant", "content": "..."}
       ]
     }
+
+owner 只在演示模式下写入（会话归属到访客 IP），本机自建的会话没有这个字段。
 
 v1 兼容：早期文件可能是纯数组 `[...]`，_read() 会自动迁移为 v2。
 
@@ -81,18 +84,29 @@ class SessionManager:
 
     # ---- 对外接口 ----
 
-    def create(self, title: str = "新会话") -> dict:
+    def create(self, title: str = "新会话", owner: str = "") -> dict:
         session_id = uuid.uuid4().hex[:12]
         now = time.time()
         data = {"title": title, "created_at": now, "updated_at": now, "messages": []}
+        if owner:
+            # 演示模式下会话归属到访客，访客之间互相看不到对方的对话
+            data["owner"] = owner
         self._write(session_id, data)
         return {"id": session_id, **data}
+
+    def owner(self, session_id: str) -> str:
+        """会话归属的访客标识。本机自建的会话没有这个字段，返回空串。"""
+        return self._read(session_id).get("owner", "")
 
     def exists(self, session_id: str) -> bool:
         return self._path(session_id).is_file()
 
-    def list_sessions(self) -> list[dict]:
-        """列出全部会话，按更新时间倒序。"""
+    def list_sessions(self, owner: str | None = None) -> list[dict]:
+        """列出会话，按更新时间倒序。
+
+        owner 非 None 时只返回归属该访客的会话（演示模式用）。没有 owner 字段的
+        历史会话（本机自己用出来的）对访客一律不可见。
+        """
         out: list[dict] = []
         for path in self._dir.glob("*.json"):
             try:
@@ -101,6 +115,8 @@ class SessionManager:
                 continue
             if isinstance(data, list):  # v1 文件
                 data = {"title": "新会话", "messages": data}
+            if owner is not None and data.get("owner", "") != owner:
+                continue
             out.append(
                 {
                     "id": path.stem,
