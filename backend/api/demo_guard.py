@@ -97,16 +97,22 @@ class DemoGuard:
         # 对访客只发一个口令，用户名不校验；定时比较，避免逐字符试探的时序侧信道
         return hmac.compare_digest(password, configured)
 
-    def _rate_limited(self, client: str, now: float) -> bool:
+    def _rate_limited(self, visitor: str, now: float) -> bool:
+        """按访客限流。
+
+        键用访客标识（Cookie）而不是客户端 IP：挂了反向代理之后所有请求都来自代理，
+        IP 全都是 127.0.0.1，按 IP 限流会变成「所有人共用一个额度池」。用 Cookie
+        则与代理无关。代价是清掉 Cookie 就能重置额度——在共享口令后面，演示场景可以接受。
+        """
         limit = self._settings.demo_chat_per_hour
         if limit <= 0:
             return False
-        recent = [t for t in self._hits[client] if now - t < RATE_WINDOW_SECONDS]
+        recent = [t for t in self._hits[visitor] if now - t < RATE_WINDOW_SECONDS]
         if len(recent) >= limit:
-            self._hits[client] = recent
+            self._hits[visitor] = recent
             return True
         recent.append(now)
-        self._hits[client] = recent
+        self._hits[visitor] = recent
         return False
 
     # ---- 访客标识 ----
@@ -151,7 +157,6 @@ class DemoGuard:
 
         path = scope["path"]
         method = scope["method"].upper()
-        client = scope["client"][0] if scope.get("client") else "unknown"
 
         vid, is_new = self._visitor(scope)
         # 交给下游（api 层）读，避免各处重复解析 Cookie
@@ -171,7 +176,7 @@ class DemoGuard:
                     scope, receive, send, 403,
                     "演示模式为只读：可以对话，但不能修改文件、技能、语料或会话。",
                 )
-            if path == "/api/chat" and self._rate_limited(client, time.time()):
+            if path == "/api/chat" and self._rate_limited(vid, time.time()):
                 return await self._deny(
                     scope, receive, send, 429,
                     f"演示模式限流：每小时最多 {self._settings.demo_chat_per_hour} 次对话，已用满。",
