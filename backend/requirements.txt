@@ -1,0 +1,62 @@
+# AirClaw 后端依赖清单（唯一依赖真相源）
+#
+# 安装：
+#   .venv/Scripts/python -m pip install -r backend/requirements.txt -i <内网镜像源>
+#
+# 离线部署（在联网机器上预取 wheel，再拷入内网）：
+#   pip download -r backend/requirements.txt -d wheelhouse/
+#   pip install --no-index --find-links=wheelhouse/ -r backend/requirements.txt
+#
+# 精确版本见 requirements.lock.txt。
+# 注意：lock 是在 Linux 容器内 pip freeze 生成的（部署目标是 Linux）。
+#   - 不要在 Windows 上重新生成后直接用于构建镜像：Windows 的 freeze 会带上
+#     pywin32 等平台专有包，Linux 容器里装不上（实测构建直接失败）。
+#   - 重新生成方式：
+#       docker run --rm -v "$PWD:/w" python:3.13-slim sh -c \
+#         "pip install -q -r /w/backend/requirements.txt && pip freeze > /w/backend/requirements.lock.txt"
+
+# ---- Web 框架 / API 层 ----
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30,<1.0
+pydantic>=2.7,<3.0
+pydantic-settings>=2.3,<3.0
+python-dotenv>=1.0,<2.0
+sse-starlette>=2.1,<4.0
+httpx>=0.27,<1.0
+python-multipart>=0.0.9,<1.0
+
+# ---- Agent 编排引擎（LangChain 1.x，核心 API: langchain.agents.create_agent）----
+langchain>=1.0,<2.0
+langchain-core>=1.0,<2.0
+langchain-community>=0.4,<0.5
+langgraph>=1.0,<2.0
+
+# ---- 模型接入：内网 OpenAI 兼容推理服务（vLLM / Ollama）----
+langchain-openai>=1.0,<2.0
+
+# ---- RAG：LlamaIndex Core + bm25s 关键词检索 ----
+# 说明：不使用 llama-index-retrievers-bm25。它默认的 token_pattern 对中文无效
+# （整句被当成一个 token，中文查询得分恒为 0），且其 tokenizer 参数已废弃不生效。
+# 改为直接调用 bm25s 并自行分词，见 tools/knowledge_index.py。
+llama-index-core>=0.12,<0.15
+llama-index-llms-openai>=0.3,<0.6
+# PDF / DOCX / 表格等语料读取器。缺少它时 SimpleDirectoryReader 只能读纯文本，
+# 而 PRD 要求知识库支持 PDF/MD/TXT。
+llama-index-readers-file>=0.4,<0.6
+bm25s>=0.2,<0.3
+
+# Excel 语料的读取引擎。pandas 读 .xlsx 依赖它；缺了会在读取时报
+# "Missing optional dependency 'openpyxl'"，且只有碰到表格时才发作。
+# 不带 .xls 支持：那是需要 xlrd 的老格式，军工内网里新出表基本是 .xlsx。
+openpyxl>=3.1,<4.0
+
+# Word 语料的读取引擎。llama-index 的 DocxReader 直接 `import docx2txt`，
+# 却没把它声明成 readers-file 的依赖；缺了会在读到 .docx 时报
+# "docx2txt is required to read Microsoft Word files"，同样只有碰到 Word 文档
+# 时才发作，表现为「上传后索引重建失败」。纯 Python、无第三方依赖（wheel 4KB），
+# 不增加内网审查负担。
+docx2txt>=0.8,<1.0
+
+# ---- 工具链 ----
+tiktoken>=0.7,<0.15
+docker>=7.1,<8.0

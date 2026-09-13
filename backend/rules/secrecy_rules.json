@@ -1,0 +1,171 @@
+{
+  "version": "1.0",
+  "updated_at": "2026-09-12",
+  "description": "AirClaw 审查规则库。由保密管理员维护，供审计钩子 pre_hook 在工具调用前扫描参数使用。命中 action=block 的规则时，本次工具调用被阻断，通过 SSE 推送 audit_warning，并写入审计日志。",
+  "match_targets": [
+    "command",
+    "code",
+    "path",
+    "query"
+  ],
+  "targets_note": "match_targets 是扫描目标的类别全集。每条规则可用 targets 字段声明自己适用于哪些类别；未声明的规则默认只扫 command/code/path/query，不扫 content。content 指 write_file 即将写入的文档正文——面向「即将执行的命令」的规则去扫文档正文会产生大量误伤（实测：报告里提一句 audit/xxx.jsonl 就被判成篡改审计日志）。密级标识类规则必须显式声明 content，因为往文件里写密级标识正是要拦的行为。",
+  "rules": [
+    {
+      "id": "secret_mark_v1",
+      "name": "密级标识字样",
+      "description": "参数中出现国家秘密密级字样。注意：这三个字均为中文常用词（如「保守秘密」「商业秘密」），单独出现不足以判定为密级标识，故仅记录并告警，不阻断。真正的密级判定由 secret_mark_format_v1 的格式规则承担。",
+      "type": "keyword",
+      "severity": "medium",
+      "action": "flag",
+      "targets": [
+        "command",
+        "code",
+        "path",
+        "query",
+        "content"
+      ],
+      "patterns": [
+        "绝密",
+        "机密",
+        "秘密"
+      ],
+      "message": "参数中出现密级字样，已记录待人工复核"
+    },
+    {
+      "id": "secret_mark_format_v1",
+      "name": "密级标识格式",
+      "description": "识别标准密级标识书写格式，如「密级：机密」「机密★」「机密[2024]123号」。",
+      "type": "regex",
+      "severity": "high",
+      "action": "block",
+      "targets": [
+        "command",
+        "code",
+        "path",
+        "query",
+        "content"
+      ],
+      "patterns": [
+        "密级\\s*[:：]\\s*(绝密|机密|秘密)",
+        "(绝密|机密|秘密)\\s*[★☆]",
+        "(绝密|机密|秘密)\\s*[\\[【(（]\\s*\\d{4}\\s*[\\]】)）]\\s*\\d+\\s*号?"
+      ],
+      "flags": "i",
+      "message": "命中密级标识格式规则"
+    },
+    {
+      "id": "secret_doc_number_v1",
+      "name": "敏感编号模式",
+      "description": "识别敏感文档编号、密件流水号等具有「密级+年份+序号」特征的编号。",
+      "type": "regex",
+      "severity": "high",
+      "action": "block",
+      "targets": [
+        "command",
+        "code",
+        "path",
+        "query",
+        "content"
+      ],
+      "patterns": [
+        "[A-Z]{2,4}\\s*[-–]?\\s*SEC\\s*[-–]?\\s*\\d{4,}",
+        "密件\\s*[字第]?\\s*\\d{3,}"
+      ],
+      "flags": "i",
+      "message": "命中敏感编号模式"
+    },
+    {
+      "id": "path_escape_v1",
+      "name": "路径逃逸尝试",
+      "description": "参数中的路径试图逃出项目根目录，或指向宿主机敏感目录。",
+      "type": "regex",
+      "severity": "high",
+      "action": "block",
+      "patterns": [
+        "\\.\\.\\s*[/\\\\]",
+        "(^|[\\s\"'=:(])/(etc|proc|sys|root|boot)([/\\s\"')]|$)",
+        "C:\\\\(Windows|Users|Program Files)"
+      ],
+      "flags": "i",
+      "message": "命中路径逃逸规则，禁止访问项目根目录以外的路径"
+    },
+    {
+      "id": "host_credential_v1",
+      "name": "宿主机凭证探测",
+      "description": "参数试图读取宿主机密钥、凭证或环境变量，可能用于沙箱逃逸。credentials 只按路径成分匹配，不裸匹配这个词——裸匹配会把 docs/credentials.md 这类正常文档一同拦下。",
+      "type": "regex",
+      "severity": "high",
+      "action": "block",
+      "patterns": [
+        "os\\.environ",
+        "(id_rsa|\\.ssh[/\\\\]|\\.aws[/\\\\]|\\.netrc|[/\\\\]credentials(?![\\w.]))",
+        "(API_KEY|SECRET_KEY|TOKEN|PASSWORD)\\s*=",
+        "\\.env(\\s|$|[\"'])"
+      ],
+      "flags": "i",
+      "message": "命中宿主机凭证探测规则"
+    },
+    {
+      "id": "destructive_command_v1",
+      "name": "破坏性命令",
+      "description": "参数中包含可能导致数据不可逆损坏的命令。判据是**递归**删除与不可逆的系统级操作：rm 只在带 -r/-R 时才拦。单个文件的 rm -f 不拦——沙箱里项目目录是只读挂载，能删到的只有本次运行的产物，而模型清理临时文件是正常动作（实测它被拦后会绕路）。删系统文件、凭证、审计日志各有专条规则覆盖。",
+      "type": "regex",
+      "severity": "high",
+      "action": "block",
+      "patterns": [
+        "rm\\s+(-[a-zA-Z]*\\s+)*-[a-zA-Z]*[rR][a-zA-Z]*",
+        "mkfs",
+        "shutdown|reboot|halt",
+        "dd\\s+if=",
+        ">\\s*/dev/[sh]d",
+        ":\\s*\\(\\s*\\)\\s*\\{.*\\};\\s*:",
+        "chmod\\s+-R\\s+777"
+      ],
+      "flags": "i",
+      "message": "命中破坏性命令黑名单"
+    },
+    {
+      "id": "network_egress_v1",
+      "name": "外联行为尝试",
+      "description": "内网隔离环境禁止任何外联，参数中出现网络请求或外网地址即拦截。只扫 command 与 code：检索词是**要找的内容**而非要执行的命令，用户问「ssh 免密怎么配」不该被拦；path 上出现 URL 也无实际含义。",
+      "type": "regex",
+      "severity": "high",
+      "action": "block",
+      "targets": [
+        "command",
+        "code"
+      ],
+      "patterns": [
+        "(curl|wget|nc|netcat|scp|ssh|ftp|telnet)\\s+",
+        "https?://(?!localhost|127\\.0\\.0\\.1|0\\.0\\.0\\.0|10\\.|192\\.168\\.|172\\.)",
+        "(requests|urllib|httpx|socket)\\.(get|post|urlopen|connect|request)",
+        "pip\\s+install(?![^\\n]*(--no-index|--find-links))",
+        "git\\s+(clone|pull|fetch|push)"
+      ],
+      "flags": "i",
+      "message": "命中外联行为规则，系统不具备任何互联网访问能力"
+    },
+    {
+      "id": "audit_tamper_v1",
+      "name": "审计日志篡改尝试",
+      "description": "审计日志为只追加模式，禁止任何修改或删除操作。重定向那条要求目标落在 audit 目录内——早期写成「出现 > 且同行有 audit 就拦」，结果命令里任何提到 audit 的重定向都被判成篡改。",
+      "type": "regex",
+      "severity": "high",
+      "action": "block",
+      "patterns": [
+        "audit[/\\\\].*\\.jsonl",
+        "(rm|mv|truncate|sed\\s+-i)\\s+[^\\n]*audit",
+        ">\\s*[^\\n]*audit[/\\\\]"
+      ],
+      "flags": "i",
+      "message": "命中审计日志篡改规则，审计日志为只追加，禁止修改与删除"
+    }
+  ],
+  "notes": [
+    "本文件由保密管理员维护，修改后需重启后端服务生效。",
+    "新增规则请遵循既有字段结构：id 全局唯一，action 取值 block/flag，severity 取值 high/medium/low。",
+    "action=flag 的规则仅记录审计日志并告警，不阻断调用；当前版本所有规则均为 block。",
+    "规则库为纯数据文件，不含可执行逻辑；规则的加载与匹配由 backend/graph/audit_hooks.py 实现。",
+    "targets 为可选字段，取值来自 match_targets。省略即默认 command/code/path/query。面向命令执行的规则不要声明 content，否则会把报告、测试数据等文档正文里的字样误判为真实动作。"
+  ]
+}

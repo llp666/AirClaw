@@ -1,0 +1,20 @@
+# 沙箱镜像构建时排除的内容
+#
+# 构建上下文是仓库根目录（见 Dockerfile 的说明），但镜像只需要两样东西：
+# 依赖清单与技能执行封装。其余内容一概不进构建上下文——否则 node_modules /
+# .venv / image 会被整个发给 Docker daemon，构建慢得离谱。
+#
+# 规则按顺序匹配，后匹配的覆盖先匹配的，故「先全排除、再逐级放行」。
+
+# 全部排除
+*
+
+# 放行 backend/，再排除其下所有内容
+!backend
+backend/*
+
+# 逐个放行真正需要进镜像的文件
+!backend/requirements.lock.txt
+!backend/sandbox
+backend/sandbox/*
+!backend/sandbox/run_tests.sh

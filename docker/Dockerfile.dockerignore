@@ -1,0 +1,31 @@
+# 构建镜像时排除的内容
+#
+# 注意：本镜像只需 backend/ 与 frontend/ 源码，不需要运行期数据与本地环境。
+
+# ---- 本地环境与依赖 ----
+.venv/
+node_modules/
+frontend/.next/
+frontend/out/
+**/__pycache__/
+*.py[cod]
+
+# ---- 运行期数据（由部署目录挂载提供，不入镜像）----
+backend/sessions/
+backend/audit/
+backend/reports/
+backend/storage/sandbox_tmp/
+backend/knowledge/
+backend/knowledge_pending/
+backend/config.json
+
+# ---- 凭证与文档 ----
+backend/.env
+doc/
+.git/
+.gitignore
+
+# ---- 编辑器 ----
+.vscode/
+.idea/
+*.log

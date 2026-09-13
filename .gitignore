@@ -1,0 +1,93 @@
+# ============================================================
+# Python
+# ============================================================
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# 虚拟环境
+.venv
+
+# ============================================================
+# 环境变量与运行配置（含内网凭证，严禁提交）
+# ============================================================
+backend/.env
+backend/config.json
+# docker compose 的 env_file 相对于 compose 文件解析，故它落在 docker/ 下
+docker/.env
+
+# ============================================================
+# 运行期生成物
+# ============================================================
+# 技能快照由 skills_scanner 启动时生成
+backend/SKILLS_SNAPSHOT.md
+
+# 会话记录与压缩归档
+backend/sessions/*.json
+backend/sessions/archive/*
+!backend/sessions/archive/.gitkeep
+
+# 长期记忆的每日日志（MEMORY.md 本身需要提交）
+backend/memory/logs/*
+!backend/memory/logs/.gitkeep
+
+# LlamaIndex 持久化索引
+backend/storage/*
+!backend/storage/memory_index/.gitkeep
+
+# 测试报告归档（code_test 技能输出）
+backend/reports/*
+!backend/reports/.gitkeep
+
+# code_test 生成的测试用例
+backend/tests/*
+!backend/tests/.gitkeep
+
+# 审计日志：只追加，仅留存在本机受控目录
+backend/audit/*.jsonl
+backend/audit/*
+!backend/audit/.gitkeep
+
+# ============================================================
+# 知识库语料 —— 敏感，严禁提交至版本库
+# 语料由管理员从内网文档源离线导入，导入前须经保密审查
+# ============================================================
+backend/knowledge/*
+!backend/knowledge/.gitkeep
+
+# 待审语料 —— 同属敏感材料，未通过保密审查前不入库也不入版本库
+backend/knowledge_pending/*
+!backend/knowledge_pending/.gitkeep
+
+# ============================================================
+# 前端（前端初始化后生效）
+# ============================================================
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# ============================================================
+# 沙箱镜像导出物
+# ============================================================
+*.tar
+backend/sandbox/*.tar
+
+# ============================================================
+# 文档目录 —— 排除版本库
+# doc/ 内含 PRD、技术文档与 model.md，其中含明文第三方 API Key，
+# 且内容敏感（军工型号/规范背景），一律不入库。
+# ============================================================
+doc/
+
+# ============================================================
+# IDE / OS
+# ============================================================
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.log

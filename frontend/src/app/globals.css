@@ -1,0 +1,226 @@
+@import "tailwindcss";
+
+/* ============================================================
+   AirClaw 主题
+   浅色 Apple 风格（Frosty Glass），克莱因蓝强调色。
+   对应 PRD 第六章第 3 节「UI/UX 风格规范」。
+   ============================================================ */
+
+:root {
+  /* 底色 */
+  --background: #fafafa;
+  --foreground: #1d1d1f;
+  --muted: #6e6e73;
+  --muted-foreground: #86868b;
+
+  /* 毛玻璃面板 */
+  --surface: rgba(255, 255, 255, 0.72);
+  --surface-solid: #ffffff;
+  --surface-raised: rgba(255, 255, 255, 0.86);
+
+  /* 描边 */
+  --border: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.14);
+
+  /* 克莱因蓝 */
+  --accent: #002fa7;
+  --accent-hover: #0039c9;
+  --accent-soft: rgba(0, 47, 167, 0.08);
+  --accent-foreground: #ffffff;
+
+  /* 语义色 */
+  --warning: #b45309;
+  --warning-bg: rgba(251, 191, 36, 0.12);
+  --warning-border: rgba(217, 119, 6, 0.35);
+  --danger: #b91c1c;
+  --success: #15803d;
+  --retrieval: #6d28d9;
+  --retrieval-bg: rgba(109, 40, 217, 0.06);
+  --retrieval-border: rgba(109, 40, 217, 0.28);
+
+  --radius: 0.75rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-surface: var(--surface);
+  --color-surface-solid: var(--surface-solid);
+  --color-surface-raised: var(--surface-raised);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
+  --color-warning-border: var(--warning-border);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --color-retrieval: var(--retrieval);
+  --color-retrieval-bg: var(--retrieval-bg);
+  --color-retrieval-border: var(--retrieval-border);
+
+  --radius-panel: var(--radius);
+}
+
+/* 本地终端可能没有联网字体，统一走系统字体栈，避免首屏字体阻塞 */
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei",
+    "Hiragino Sans GB", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, "Courier New", monospace;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* ---- 毛玻璃面板 ---- */
+
+.glass {
+  background: var(--surface);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+
+.glass-strong {
+  background: var(--surface-raised);
+  backdrop-filter: saturate(180%) blur(24px);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+}
+
+/* ---- 滚动条 ---- */
+
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.18) transparent;
+}
+
+.scroll-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.16);
+  border-radius: 4px;
+}
+
+.scroll-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.scroll-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---- 流式光标 ---- */
+
+@keyframes airclaw-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.streaming-caret::after {
+  content: "▍";
+  margin-left: 2px;
+  color: var(--accent);
+  animation: airclaw-blink 1s steps(1, end) infinite;
+}
+
+/* ---- Markdown 正文 ---- */
+
+.prose-airclaw {
+  line-height: 1.7;
+  word-break: break-word;
+}
+
+.prose-airclaw > * + * {
+  margin-top: 0.75em;
+}
+
+.prose-airclaw h1,
+.prose-airclaw h2,
+.prose-airclaw h3 {
+  font-weight: 600;
+  line-height: 1.3;
+  margin-top: 1.2em;
+}
+
+.prose-airclaw h1 { font-size: 1.25rem; }
+.prose-airclaw h2 { font-size: 1.125rem; }
+.prose-airclaw h3 { font-size: 1rem; }
+
+.prose-airclaw ul,
+.prose-airclaw ol {
+  padding-left: 1.4em;
+}
+
+.prose-airclaw ul { list-style: disc; }
+.prose-airclaw ol { list-style: decimal; }
+
+.prose-airclaw li + li { margin-top: 0.25em; }
+
+.prose-airclaw code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 0.12em 0.36em;
+  border-radius: 4px;
+}
+
+.prose-airclaw pre {
+  background: #1d1d1f;
+  color: #f5f5f7;
+  padding: 0.9em 1em;
+  border-radius: 0.6rem;
+  overflow-x: auto;
+  font-size: 0.84em;
+}
+
+.prose-airclaw pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+.prose-airclaw blockquote {
+  border-left: 3px solid var(--border-strong);
+  padding-left: 0.9em;
+  color: var(--muted);
+}
+
+.prose-airclaw table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.92em;
+}
+
+.prose-airclaw th,
+.prose-airclaw td {
+  border: 1px solid var(--border-strong);
+  padding: 0.4em 0.7em;
+  text-align: left;
+}
+
+.prose-airclaw th {
+  background: rgba(0, 0, 0, 0.03);
+  font-weight: 600;
+}
+
+.prose-airclaw a {
+  color: var(--accent);
+  text-decoration: underline;
+}

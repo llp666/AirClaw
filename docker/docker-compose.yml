@@ -1,0 +1,71 @@
+# AirClaw 一键部署（Docker 命名卷模式）
+#
+# 用法：
+#   1. 把交付包解压到部署目录
+#   2. 载入镜像：
+#        docker load -i dist/airclaw.tar
+#        docker load -i dist/airclaw-sandbox.tar
+#   3. 编辑 .env，填入内网模型服务地址与密钥
+#   4. docker compose up -d
+#   5. 浏览器访问 http://<本机IP>:8002
+#
+# ---------------------------------------------------------------
+# 为什么用命名卷而不是绑定挂载
+#
+# 沙箱容器由 Docker daemon 创建，其挂载源由 daemon 在**宿主机**上解析。
+# 若用绑定挂载，容器内路径必须与宿主机路径完全一致，否则源找不到 —— 而且
+# 沙箱容器照常启动、不报错，只是 /workspace/src 变成空目录（已实测确认）。
+#
+# 命名卷由 Docker 自己解析，与宿主机路径无关，Windows / Linux 行为一致。
+# ---------------------------------------------------------------
+
+services:
+  airclaw:
+    image: airclaw:latest
+    container_name: airclaw
+    restart: unless-stopped
+
+    ports:
+      - "8002:8002"
+
+    volumes:
+      # 代码卷：应用侧挂在 /srv/airclaw-src（读写，应用要写会话/记忆/审计），
+      # 沙箱侧以只读方式挂在 /workspace/src。
+      - airclaw-src:/srv/airclaw-src
+
+      # 输出卷：应用侧挂在 /srv/airclaw-out，沙箱侧读写挂在 /workspace/out。
+      # 沙箱的临时工作区在其下的 tmp/ 中。
+      - airclaw-out:/srv/airclaw-out
+
+      # 沙箱执行需要访问 Docker daemon。
+      # 挂载 docker.sock 等于把宿主机 Docker 控制权交给本容器（等价宿主机 root），
+      # 本地环境须由保密管理员确认接受。本项目容器化前应用就跑在宿主机上，
+      # 权限本来就是这么大，故该挂载不比现状更差。
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    environment:
+      # 代码与数据都放在代码卷里，应用据此定位
+      AIRCLAW_HOME: /srv/airclaw-src
+
+      # 命名卷模式开关：同时给出两个卷名即启用
+      SANDBOX_SRC_VOLUME: airclaw-src
+      SANDBOX_OUT_VOLUME: airclaw-out
+      SANDBOX_SRC_MOUNT: /srv/airclaw-src
+      SANDBOX_OUT_MOUNT: /srv/airclaw-out
+
+    env_file:
+      - .env
+
+    stop_grace_period: 30s
+
+# 卷名必须固定，不能被 compose 加上项目名前缀。
+#
+# compose 默认把卷命名为 <项目名>_<卷名>（如 myproj_airclaw-src）。而应用是通过
+# SANDBOX_SRC_VOLUME / SANDBOX_OUT_VOLUME 按**裸卷名**去挂载的，一旦前缀不一致，
+# Docker 会另建一个同名的空卷 —— 表现为沙箱里什么都看不到，且不报错。
+# 用 name: 显式钉死卷名即可。
+volumes:
+  airclaw-src:
+    name: airclaw-src
+  airclaw-out:
+    name: airclaw-out
