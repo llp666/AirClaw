@@ -8,11 +8,11 @@
                  挡的是「链接被转发出去」这类风险，不是账号体系。
   2. 只读        除「发起对话」与「新建会话」外，一切非 GET 请求一律拒绝。
                  Agent 照常读文件、跑沙箱（那是它的本职），但访客改不了任何东西。
-  3. 按 IP 限流  对话条数（滚动一小时）与单条消息长度封顶，避免有人拿它刷模型额度。
+  3. 按访客限流  对话条数（滚动一小时）与单条消息长度封顶，避免有人拿它刷模型额度。
                  单条长度在 api/chat.py 里校验——那里才拿得到消息正文。
 
-另有一层不在本模块：演示模式下会话按访客 IP 隔离（见 api/sessions.py 的 _own），
-访客互相看不到对方的对话。
+另有一层不在本模块：演示模式下会话按访客隔离（见 api/sessions.py 的 _own），
+访客互相看不到对方的对话。访客身份取浏览器 Cookie，理由见 visitor_id 的说明。
 
 为什么写成**纯 ASGI 中间件**而不是 `BaseHTTPMiddleware` 或 `@app.middleware("http")`：
 那两个都走 BaseHTTPMiddleware，会包一层响应缓冲，而对话接口是 SSE 长连接——已知会
@@ -75,7 +75,7 @@ class DemoGuard:
     def __init__(self, app: ASGIApp, settings: Settings) -> None:
         self.app = app
         self._settings = settings
-        #: 访客 IP → 本窗口内的对话时间戳。只存进程内存，重启即清空——
+        #: 访客标识 → 本窗口内的对话时间戳。只存进程内存，重启即清空——
         #: 演示场景够用，也免得为此引入 Redis 之类的依赖。
         self._hits: dict[str, list[float]] = defaultdict(list)
 
