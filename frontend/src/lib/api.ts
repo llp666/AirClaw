@@ -27,20 +27,30 @@ export type {
 
 const API_PORT = 8002;
 
+/** 前端 dev server 的端口。开发时前端在 3000、后端在 8002，两者不同源。 */
+const DEV_FRONTEND_PORT = "3000";
+
 /**
- * 后端地址。
+ * 后端地址。优先级：
  *
- * 默认取「同源 + 8002」：本地直跑、或由后端托管静态产物时前后端同源，无需配置。
- * 部署到静态托管（Netlify 等）时用 `NEXT_PUBLIC_API_BASE` 指向真实后端，
- * 例如 `https://airclaw.example.com`——那种情况下后端须允许跨域（CORS）。
+ *   1. 构建期注入的 `NEXT_PUBLIC_API_BASE`（跨域部署用，例如前端托管在别处）
+ *   2. **页面自己的 origin** —— 部署时要么后端托管静态产物、要么前面挂了反向代理，
+ *      两种情况都是同源
+ *   3. 唯一的例外是开发环境：前端 dev server 在 3000，后端在 8002
+ *
+ * 这里曾经无条件拼 `:8002`。一旦部署在 443 的反向代理后面（这正是线上那台的样子），
+ * 那一拼会把所有 /api 请求打到 `https://<域名>:8002`——那里既没有服务也没有证书，
+ * 于是页面能打开、界面却全程报「连不上后端」。凡是经过反向代理或标准端口的部署都会中这一枪。
  */
 const CONFIGURED_BASE = process.env.NEXT_PUBLIC_API_BASE?.trim().replace(/\/+$/, "");
 
-export const API_BASE =
-  CONFIGURED_BASE ||
-  (typeof window === "undefined"
-    ? `http://localhost:${API_PORT}`
-    : `${window.location.protocol}//${window.location.hostname}:${API_PORT}`);
+export const API_BASE = (() => {
+  if (CONFIGURED_BASE) return CONFIGURED_BASE;
+  if (typeof window === "undefined") return `http://localhost:${API_PORT}`;
+  return window.location.port === DEV_FRONTEND_PORT
+    ? `${window.location.protocol}//${window.location.hostname}:${API_PORT}`
+    : window.location.origin;
+})();
 
 /**
  * 网络层失败时给出能定位的提示。
