@@ -195,7 +195,7 @@ class SandboxRunner:
 
         mounts = self._build_mounts(settings, src, out)
         mounts.extend(self._file_masks(settings, src))
-        tmpfs = {"/tmp": "rw,size=512m", **self._dir_masks()}
+        tmpfs = {"/tmp": "rw,size=512m", **self._dir_masks(src)}
 
         if settings.sandbox_uses_volume:
             # 沙箱容器以 uid 1000 运行，而应用容器通常以 root 运行，
@@ -312,13 +312,24 @@ class SandboxRunner:
         ]
 
     @staticmethod
-    def _dir_masks() -> dict[str, str]:
+    def _dir_masks(src: Path) -> dict[str, str]:
         """要遮蔽的目录 → tmpfs 参数。
 
         可写（rw）：见 SANDBOX_MASKED_DIRS 的说明——只读会让导入期与被测代码里的
         mkdir 报 ReadOnlyFileSystem。写入落在 tmpfs 里，随容器销毁。
+
+        **只遮蔽 src 里实际存在的目录**：容器 rootfs 是只读的，而 Docker 挂 tmpfs 前
+        要先创建挂载点（mkdirat）。挂载树里没有那个路径时这一步必然失败，整个容器
+        起不来——实测报
+        `make mountpoint "/workspace/src/doc": ... read-only file system`。
+        命名卷模式下交付镜像本就不含 doc/（dockerignore 排除），那里没有东西要遮，
+        跳过即可；绑定模式下项目根目录整个挂进去，doc/ 存在，照常遮蔽。
         """
-        return {f"{SANDBOX_SRC}/{rel}": "rw,size=1m" for rel in SANDBOX_MASKED_DIRS}
+        return {
+            f"{SANDBOX_SRC}/{rel}": "rw,size=1m"
+            for rel in SANDBOX_MASKED_DIRS
+            if (src / rel).is_dir()
+        }
 
     @staticmethod
     def _file_masks(settings: Settings, src: Path) -> list[Mount]:
