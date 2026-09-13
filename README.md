@@ -54,13 +54,13 @@ docker compose up -d
 ```
 AirClaw/
 ├── backend/
-│   ├── app.py              # FastAPI 入口（端口 8002）
-│   ├── config.py           # 全局配置（.env + config.json）
+│   ├── app.py              # FastAPI 入口
+│   ├── config.py           # 全局配置
 │   ├── api/                # 路由层：chat / sessions / files / skills
 │   │                       #   / knowledge / tokens / config / rag
 │   ├── graph/              # Agent 引擎：agent / prompt_builder / session_manager
 │   │                       #   / audit_hooks / tool_dedup / memory_indexer / daily_log
-│   │                       #   / audit_report / audit_retention（审计核查与保留）
+│   │                       #   / audit_report / audit_retention
 │   ├── tools/              # 核心工具：terminal / python_repl / read_file
 │   │                       #   / write_file / search_knowledge_base
 │   ├── workspace/          # System Prompt 组件：SOUL / IDENTITY / USER / AGENTS
@@ -69,12 +69,11 @@ AirClaw/
 │   ├── sandbox/            # 沙箱镜像与技能执行封装
 │   ├── memory/             # MEMORY.md 长期记忆 + 每日日志
 │   ├── sessions/           # 会话 JSON + 压缩归档
-│   ├── knowledge/          # 知识库语料（离线导入）
-│   ├── knowledge_pending/  # 待审语料（保密审查通过后才入库）
+│   ├── knowledge/          # 知识库语料
+│   ├── knowledge_pending/  # 待审语料
 │   ├── reports/            # code_test 报告归档
-│   └── audit/              # 审计日志 JSONL（只追加）
+│   └── audit/              # 审计日志 JSONL
 ├── frontend/               # Next.js + React + Tailwind
 │   └── src/app/admin/      # RAG 检索诊断页
-├── docker/                 # 应用镜像、compose 与交付打包脚本
-└── doc/                    # 需求与设计文档（不入库）
+└── docker/                 # 应用镜像
 ```

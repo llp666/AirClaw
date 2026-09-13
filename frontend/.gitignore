@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# next dev 每次启动写回的两个 agent 说明文件：CLAUDE.md 只有一行 @AGENTS.md，
+# 没有自有内容，故不入库（AGENTS.md 仍跟踪，它承载真正的生成内容）
+/CLAUDE.md
