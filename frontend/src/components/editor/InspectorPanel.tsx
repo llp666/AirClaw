@@ -208,6 +208,14 @@ export default function InspectorPanel() {
               <div className="flex flex-1 items-center justify-center text-[12px] text-muted-foreground">
                 载入中…
               </div>
+            ) : status.kind === "error" && !content ? (
+              /* 载入失败且没有内容可显示时，别留一片空白编辑器——那看起来像「文件是空的」，
+                 而真实原因（连不上后端）只缩在底部状态栏里。 */
+              <div className="flex flex-1 items-center justify-center px-8">
+                <p className="max-w-sm text-center text-[11.5px] leading-relaxed text-muted-foreground">
+                  {status.message}
+                </p>
+              </div>
             ) : (
               <MonacoEditor
                 height="100%"

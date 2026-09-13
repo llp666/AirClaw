@@ -27,13 +27,42 @@ export type {
 
 const API_PORT = 8002;
 
+/**
+ * 后端地址。
+ *
+ * 默认取「同源 + 8002」：本地直跑、或由后端托管静态产物时前后端同源，无需配置。
+ * 部署到静态托管（Netlify 等）时用 `NEXT_PUBLIC_API_BASE` 指向真实后端，
+ * 例如 `https://airclaw.example.com`——那种情况下后端须允许跨域（CORS）。
+ */
+const CONFIGURED_BASE = process.env.NEXT_PUBLIC_API_BASE?.trim().replace(/\/+$/, "");
+
 export const API_BASE =
-  typeof window === "undefined"
+  CONFIGURED_BASE ||
+  (typeof window === "undefined"
     ? `http://localhost:${API_PORT}`
-    : `${window.location.protocol}//${window.location.hostname}:${API_PORT}`;
+    : `${window.location.protocol}//${window.location.hostname}:${API_PORT}`);
+
+/**
+ * 网络层失败时给出能定位的提示。
+ *
+ * fetch 本身抛的是浏览器的 `Failed to fetch`，既没说是哪个地址，也没说为什么——
+ * 部署到静态托管后，右栏编辑器、会话列表都会栽在这里，而那正是最需要看清原因的时刻。
+ */
+async function fetchOrExplain(url: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch (e) {
+    const why = e instanceof Error ? e.message : String(e);
+    throw new Error(
+      `连不上后端 ${API_BASE}（${why}）。本页只是前端界面，` +
+        `文件读写、对话与检索都由 FastAPI 后端提供；静态托管上没有它。` +
+        `要接到真实后端，构建时设置 NEXT_PUBLIC_API_BASE。`,
+    );
+  }
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetchOrExplain(`${API_BASE}${path}`, {
     ...init,
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
   });
@@ -363,7 +392,7 @@ export async function streamChat(
   handlers: StreamHandlers,
   signal?: AbortSignal,
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/chat`, {
+  const res = await fetchOrExplain(`${API_BASE}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message, session_id: sessionId, stream: true }),
