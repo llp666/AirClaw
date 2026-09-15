@@ -41,11 +41,11 @@ docker compose up -d
 | 能力 | 说明 |
 | --- | --- |
 | 对话 | SSE 流式输出，思考链、工具调用链、检索结果分别可视化 |
-| 技能 | Agent Skills 范式：技能是 `SKILL.md` 说明书，Agent 用 `read_file` 读取后自行组织执行。支持上传 `.zip` 技能包，拖入即用 |
+| 技能 | Agent Skills 范式：技能是 `SKILL.md` 说明书，Agent 用 `read_file` 读取后自行组织执行。支持上传 `.zip` 技能包 |
 | 知识库 | RAG 混合检索（中文 BM25 + 向量，RRF 融合），支持 PDF / Word / Markdown / txt / Excel / CSV |
 | 长期记忆 | `MEMORY.md` 跨会话记忆；文件较小时整篇注入 System Prompt，变大后自动切换为按需检索 |
 | 代码自动化测试 | 内置 `code_test` 技能：生成用例 → 沙箱执行 → 覆盖率 → 报告 → 归档 |
-| 沙箱执行 | `terminal` / `python_repl` 的一切执行都在无网络 Docker 容器内完成，项目目录只读挂载；审计日志、凭证与规则库已从沙箱中遮蔽 |
+| 沙箱执行 | `terminal` / `python_repl` 的一切执行都在无网络 Docker 容器内完成，项目目录只读挂载 |
 | 审查与审计 | 工具调用前扫描参数、命中规则即阻断；全部调用写入按日分片的 JSONL 审计日志 |
 | RAG 诊断 | `/admin` 独立页面，查看一次检索召回了哪些片段、各自分数与向量，便于调参 |
 
